@@ -40,8 +40,13 @@ The simulation consists of three core components:
 ### 2. Key Features
 *   **State Machines**: Strict adherence to 2PC state transitions (Init -> Ready -> Committed/Aborted).
 *   **Configurable Latency**: Network delays are modeled with an average latency and random jitter to mimic real-world variance.
-*   **Packet Loss**: Support for probabilistic message dropping to test timeout and retry mechanisms (basic timeout implemented).
-*   **Fault Injection**: Participants can be configured to randomly vote `NO` to simulate local validation failures or deadlocks.
+*   **Reliable Transport Layer**:
+    *   **Packet Loss Simulation**: Support for probabilistic message dropping.
+    *   **Retry Logic**: The Coordinator implements a robust retry mechanism (default 500ms interval) to handle dropped packets during Phase 1 (Prepare) and Phase 2 (Decision).
+    *   **Idempotency**: Participants are fully idempotent, handling duplicate messages correctly without incorrect state transitions.
+*   **Fault Injection**:
+    *   **Network Drops**: Control packet loss probability.
+    *   **Random Aborts**: Participants can be configured to randomly vote `NO` to simulate local constraint violations.
 
 ### 3. Project Structure
 ```text
@@ -49,9 +54,9 @@ The simulation consists of three core components:
 ├── cmd
 │   └── 2pc-sim        # Main entry point and CLI runner
 ├── pkg
-│   ├── node           # Logic for Coordinator and Participants
+│   ├── node           # Logic for Coordinator (with retries) and Participants (idempotent)
 │   ├── protocol       # Definitions of 2PC messages (Prepare, Vote, etc.)
-│   └── transport      # Network simulation (Channel-based with delay)
+│   └── transport      # Network simulation (Channel-based with delay/jitter)
 └── README.md
 ```
 
@@ -73,13 +78,14 @@ The CLI supports several flags to vary the simulation parameters:
 | `--drop-rate` | 0.0 | Probability of packet loss (0.0 - 1.0) |
 | `--abort-rate` | 0.0 | Probability of a participant voting NO |
 | `--timeout` | 5 | Transaction timeout (seconds) |
+| `--jitter` | 0.2 | Network jitter factor (0.0 - 1.0), relative to latency |
 
 ### Scenarios
 
 **1. Baseline Performance**
 Measure standard overhead with low latency.
 ```bash
-./2pc-sim --participants 5 --latency 5
+./2pc-sim --participants 5 --latency 5 --jitter 0.1
 ```
 
 **2. High Latency / WAN Simulation**
@@ -88,9 +94,17 @@ Simulate a geo-distributed database across continents.
 ./2pc-sim --latency 150 --participants 3
 ```
 
-**3. High Failure Rate**
-Simulate an unstable environment where half the transactions fail.
+**3. Robustness Under Network Failure (New)**
+Demonstrate the retry mechanism recovering from packet loss.
 ```bash
+# Even with 20% packet loss, the transaction should eventually Commit
+./2pc-sim --drop-rate 0.2 --abort-rate 0.0 --participants 5
+```
+
+**4. High Abort Scenario**
+Simulate critical constraint violations causing frequent aborts.
+```bash
+# Note: Any single "No" vote causes an immediate Abort logic, bypassing retries
 ./2pc-sim --abort-rate 0.5
 ```
 
