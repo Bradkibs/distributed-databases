@@ -108,6 +108,12 @@ Simulate critical constraint violations causing frequent aborts.
 ./2pc-sim --abort-rate 0.5
 ```
 
+**5. Testing**
+```bash
+# Run tests verbosely
+go test -v ./pkg/**
+``` 
+
 ## Future Work
 - **Persistence**: Add Write-Ahead Logging (WAL) to simulate disk I/O latency.
 - **Recovery Protocol**: Implement the full recovery procedure for nodes coming back online after a crash.
