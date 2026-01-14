@@ -65,6 +65,26 @@ func (p *Participant) handleMessage(msg protocol.Message) {
 }
 
 func (p *Participant) handlePrepare(msg protocol.Message) {
+	// Idempotency: If we already voted, resend that vote
+	if p.State == protocol.StateReady {
+		p.Net.Send(protocol.Message{
+			Type:          protocol.MsgVoteYes,
+			TransactionID: msg.TransactionID,
+			FromID:        p.ID,
+			ToID:          msg.FromID,
+		})
+		return
+	}
+	if p.State == protocol.StateAborted {
+		p.Net.Send(protocol.Message{
+			Type:          protocol.MsgVoteNo,
+			TransactionID: msg.TransactionID,
+			FromID:        p.ID,
+			ToID:          msg.FromID,
+		})
+		return
+	}
+	// If Committed, we ignore Prepare (we must have voted Yes already)
 	if p.State != protocol.StateInit {
 		return
 	}
@@ -79,16 +99,21 @@ func (p *Participant) handlePrepare(msg protocol.Message) {
 		p.ReadyTime = time.Now()
 	}
 
-	reply := protocol.Message{
+	p.Net.Send(protocol.Message{
 		Type:          vote,
 		TransactionID: msg.TransactionID,
 		FromID:        p.ID,
 		ToID:          msg.FromID,
-	}
-	p.Net.Send(reply)
+	})
 }
 
 func (p *Participant) handleCommit(msg protocol.Message) {
+	if p.State == protocol.StateCommitted {
+		// Idempotent: resend Ack
+		p.sendAck(msg.TransactionID, msg.FromID)
+		return
+	}
+
 	if p.State == protocol.StateReady {
 		p.State = protocol.StateCommitted
 		log.Printf("[Participant %s] COMMITTED Tx %s", p.ID, msg.TransactionID)
@@ -99,6 +124,12 @@ func (p *Participant) handleCommit(msg protocol.Message) {
 }
 
 func (p *Participant) handleAbort(msg protocol.Message) {
+	if p.State == protocol.StateAborted {
+		// Idempotent: resend Ack
+		p.sendAck(msg.TransactionID, msg.FromID)
+		return
+	}
+
 	if p.State == protocol.StateReady || p.State == protocol.StateInit {
 		p.State = protocol.StateAborted
 		log.Printf("[Participant %s] ABORTED Tx %s", p.ID, msg.TransactionID)

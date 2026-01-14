@@ -27,12 +27,12 @@ type SimulatedNetwork struct {
 }
 
 // NewSimulatedNetwork creates a new simulated network
-func NewSimulatedNetwork(delay time.Duration, dropRate float64) *SimulatedNetwork {
+func NewSimulatedNetwork(delay time.Duration, dropRate float64, jitter float64) *SimulatedNetwork {
 	return &SimulatedNetwork{
 		nodes:        make(map[string]chan protocol.Message),
 		AverageDelay: delay,
 		DropRate:     dropRate,
-		Jitter:       0.2, // Default 20% jitter
+		Jitter:       jitter,
 		r:            rand.New(rand.NewSource(time.Now().UnixNano())),
 	}
 }
@@ -84,17 +84,20 @@ func (n *SimulatedNetwork) Send(msg protocol.Message) {
 
 func (n *SimulatedNetwork) DropCheck() bool {
 	// n.r is not safe for concurrent use, so we strictly speaking should lock it or use a per-goroutine source.
-	// For simplicity in this non-crypto simulation, using global rand functions or locking.
 	// Let's use math/rand global functions which are thread-safe (locked internally).
-	return rand.Float64() < n.DropRate
+	n.mu.Lock()
+	defer n.mu.Unlock()
+	return n.r.Float64() < n.DropRate
 }
 
 func (n *SimulatedNetwork) calculateDelay() time.Duration {
 	// Simple uniform distribution: Delay +/- Jitter
 	jitterRange := float64(n.AverageDelay) * n.Jitter
-	// rand.Float64 returns [0.0, 1.0)
+	// 	n.r.Float64 returns [0.0, 1.0)
 	// We want offset in [-jitterRange, +jitterRange)
-	offset := (rand.Float64() * 2 * jitterRange) - jitterRange
+	n.mu.Lock()
+	defer n.mu.Unlock()
+	offset := (n.r.Float64() * 2 * jitterRange) - jitterRange
 	delay := time.Duration(float64(n.AverageDelay) + offset)
 	if delay < 0 {
 		return 0

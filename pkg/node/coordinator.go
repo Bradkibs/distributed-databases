@@ -12,20 +12,22 @@ import (
 )
 
 type Coordinator struct {
-	ID           string
-	Net          transport.Network
-	Participants []string
-	Inbox        chan protocol.Message
-	Timeout      time.Duration
+	ID            string
+	Net           transport.Network
+	Participants  []string
+	Inbox         chan protocol.Message
+	Timeout       time.Duration
+	RetryInterval time.Duration
 }
 
 func NewCoordinator(id string, net transport.Network, participants []string, timeout time.Duration) *Coordinator {
 	return &Coordinator{
-		ID:           id,
-		Net:          net,
-		Participants: participants,
-		Inbox:        make(chan protocol.Message, 100),
-		Timeout:      timeout,
+		ID:            id,
+		Net:           net,
+		Participants:  participants,
+		Inbox:         make(chan protocol.Message, 100),
+		Timeout:       timeout,
+		RetryInterval: 500 * time.Millisecond,
 	}
 }
 
@@ -41,27 +43,48 @@ func (c *Coordinator) RunTransaction() (bool, time.Duration) {
 
 	log.Printf("[Coordinator] Starting Tx %s", txID)
 
+	// Helper closure to send message to a specific participant
+	sendTo := func(to string, msgType protocol.MessageType) {
+		c.Net.Send(protocol.Message{
+			Type:          msgType,
+			TransactionID: txID,
+			FromID:        c.ID,
+			ToID:          to,
+		})
+	}
+
 	// Phase 1: Prepare
 	c.broadcast(protocol.MsgPrepare, txID)
 
 	// Wait for votes
 	votes := make(map[string]bool)
+	pendingVotes := make(map[string]bool)
+	for _, p := range c.Participants {
+		pendingVotes[p] = true
+	}
+
 	aborted := false
 
 	ctx, cancel := context.WithTimeout(context.Background(), c.Timeout)
 	defer cancel()
 
-	// We need to collect votes from all participants
-	pending := len(c.Participants)
+	// Retry loop for Phase 1
+	ticker := time.NewTicker(c.RetryInterval)
+	defer ticker.Stop()
 
-	// Inner loop to read from inbox until decision or timeout
 Loop:
-	for pending > 0 {
+	for len(pendingVotes) > 0 {
 		select {
 		case <-ctx.Done():
 			log.Printf("[Coordinator] Timeout waiting for votes in Tx %s", txID)
 			aborted = true
 			break Loop
+		case <-ticker.C:
+			// Retry Prepare for those who haven't voted
+			for pID := range pendingVotes {
+				// We don't log every retry to avoid spam
+				sendTo(pID, protocol.MsgPrepare)
+			}
 		case msg := <-c.Inbox:
 			if msg.TransactionID != txID {
 				continue
@@ -73,7 +96,7 @@ Loop:
 			} else if msg.Type == protocol.MsgVoteYes {
 				if !votes[msg.FromID] {
 					votes[msg.FromID] = true
-					pending--
+					delete(pendingVotes, msg.FromID)
 				}
 			}
 		}
@@ -88,28 +111,33 @@ Loop:
 	log.Printf("[Coordinator] Decision for Tx %s: %s", txID, decision)
 	c.broadcast(decision, txID)
 
-	// Wait for Acks (Optional for strict blocking measurement, but good for completeness)
-	// For this simulation, we'll wait for acks just to ensure protocol completes cleanly,
-	// checking strictly for latency impact.
-	// Re-using context/timeout remaining or new timeout?
-	// Real 2PC might retry. Here we just wait with timeout.
+	// Wait for Acks
+	pendingAcks := make(map[string]bool)
+	for _, p := range c.Participants {
+		pendingAcks[p] = true
+	}
 
-	ackPending := len(c.Participants)
 	ctxAck, cancelAck := context.WithTimeout(context.Background(), c.Timeout)
 	defer cancelAck()
 
+	// Reuse ticker for Phase 2 retries
 AckLoop:
-	for ackPending > 0 {
+	for len(pendingAcks) > 0 {
 		select {
 		case <-ctxAck.Done():
 			log.Printf("[Coordinator] Timeout waiting for ACKs in Tx %s", txID)
 			break AckLoop
+		case <-ticker.C:
+			// Retry Decision
+			for pID := range pendingAcks {
+				sendTo(pID, decision)
+			}
 		case msg := <-c.Inbox:
 			if msg.TransactionID != txID {
 				continue
 			}
 			if msg.Type == protocol.MsgAck {
-				ackPending--
+				delete(pendingAcks, msg.FromID)
 			}
 		}
 	}

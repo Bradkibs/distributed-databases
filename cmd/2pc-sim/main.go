@@ -17,6 +17,7 @@ func main() {
 		dropRate        float64
 		voteNoRate      float64
 		timeoutSec      int
+		jitter          float64
 	)
 
 	flag.IntVar(&numParticipants, "participants", 3, "Number of participants")
@@ -24,6 +25,7 @@ func main() {
 	flag.Float64Var(&dropRate, "drop-rate", 0.0, "Packet drop rate (0.0 - 1.0)")
 	flag.Float64Var(&voteNoRate, "abort-rate", 0.0, "Probability of a participant voting No (0.0 - 1.0)")
 	flag.IntVar(&timeoutSec, "timeout", 5, "Transaction timeout in seconds")
+	flag.Float64Var(&jitter, "jitter", 0.2, "Network jitter (0.0 - 1.0)")
 	flag.Parse()
 
 	rand.Seed(time.Now().UnixNano())
@@ -37,7 +39,7 @@ func main() {
 	fmt.Println("------------------------------------")
 
 	// Initialize Network
-	net := transport.NewSimulatedNetwork(time.Duration(latencyMs)*time.Millisecond, dropRate)
+	net := transport.NewSimulatedNetwork(time.Duration(latencyMs)*time.Millisecond, dropRate, jitter)
 
 	// Initialize Participants
 	var pIDs []string
