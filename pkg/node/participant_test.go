@@ -8,20 +8,9 @@ import (
 	"2pc-sim/pkg/protocol"
 )
 
-// MockNetwork implements transport.Network for testing
-type MockNetwork struct {
-	Sent []protocol.Message
-}
-
-func (m *MockNetwork) Send(msg protocol.Message) {
-	m.Sent = append(m.Sent, msg)
-}
-
-func (m *MockNetwork) Register(id string, ch chan protocol.Message) {}
-func (m *MockNetwork) Unregister(id string)                         {}
-
 func TestParticipant_StateTransitions(t *testing.T) {
-	net := &MockNetwork{}
+	// Use NewMockNetwork from common_test.go
+	net := NewMockNetwork()
 	p := NewParticipant("p1", net, "coord")
 
 	// 1. Initial State
@@ -43,8 +32,8 @@ func TestParticipant_StateTransitions(t *testing.T) {
 	if p.State != protocol.StateReady {
 		t.Errorf("Expected StateReady after Prepare, got %s", p.State)
 	}
-	if len(net.Sent) != 1 || net.Sent[0].Type != protocol.MsgVoteYes {
-		t.Errorf("Expected MsgVoteYes sent, got %v", net.Sent)
+	if len(net.SentMessages) != 1 || net.SentMessages[0].Type != protocol.MsgVoteYes {
+		t.Errorf("Expected MsgVoteYes sent, got %v", net.SentMessages)
 	}
 
 	// 3. Commit -> Committed
@@ -55,19 +44,19 @@ func TestParticipant_StateTransitions(t *testing.T) {
 		ToID:          "p1",
 	}
 
-	net.Sent = nil // Clear sent
+	net.SentMessages = nil // Clear sent
 	p.handleCommit(commitMsg)
 
 	if p.State != protocol.StateCommitted {
 		t.Errorf("Expected StateCommitted after Commit, got %s", p.State)
 	}
-	if len(net.Sent) != 1 || net.Sent[0].Type != protocol.MsgAck {
-		t.Errorf("Expected MsgAck sent, got %v", net.Sent)
+	if len(net.SentMessages) != 1 || net.SentMessages[0].Type != protocol.MsgAck {
+		t.Errorf("Expected MsgAck sent, got %v", net.SentMessages)
 	}
 }
 
 func TestParticipant_ForceAbort(t *testing.T) {
-	net := &MockNetwork{}
+	net := NewMockNetwork()
 	p := NewParticipant("p1", net, "coord")
 	p.ForceVoteNo = true
 
@@ -84,7 +73,7 @@ func TestParticipant_ForceAbort(t *testing.T) {
 	if p.State != protocol.StateAborted {
 		t.Errorf("Expected StateAborted after Forced VoteNo, got %s", p.State)
 	}
-	if len(net.Sent) != 1 || net.Sent[0].Type != protocol.MsgVoteNo {
-		t.Errorf("Expected MsgVoteNo sent, got %v", net.Sent)
+	if len(net.SentMessages) != 1 || net.SentMessages[0].Type != protocol.MsgVoteNo {
+		t.Errorf("Expected MsgVoteNo sent, got %v", net.SentMessages)
 	}
 }
