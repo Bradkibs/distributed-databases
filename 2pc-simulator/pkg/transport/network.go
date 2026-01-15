@@ -93,7 +93,7 @@ func (n *SimulatedNetwork) DropCheck() bool {
 func (n *SimulatedNetwork) calculateDelay() time.Duration {
 	// Simple uniform distribution: Delay +/- Jitter
 	jitterRange := float64(n.AverageDelay) * n.Jitter
-	// 	n.r.Float64 returns [0.0, 1.0)
+	// n.r.Float64 returns [0.0, 1.0)
 	// We want offset in [-jitterRange, +jitterRange)
 	n.mu.Lock()
 	defer n.mu.Unlock()

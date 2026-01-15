@@ -20,14 +20,14 @@ type Coordinator struct {
 	RetryInterval time.Duration
 }
 
-func NewCoordinator(id string, net transport.Network, participants []string, timeout time.Duration) *Coordinator {
+func NewCoordinator(id string, net transport.Network, participants []string, timeout time.Duration, retryInterval time.Duration) *Coordinator {
 	return &Coordinator{
 		ID:            id,
 		Net:           net,
 		Participants:  participants,
 		Inbox:         make(chan protocol.Message, 100),
 		Timeout:       timeout,
-		RetryInterval: 500 * time.Millisecond,
+		RetryInterval: retryInterval,
 	}
 }
 

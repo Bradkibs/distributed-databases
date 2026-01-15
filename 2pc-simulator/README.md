@@ -114,6 +114,71 @@ Simulate critical constraint violations causing frequent aborts.
 go test -v ./pkg/**
 ``` 
 
+### 6. Performance Analysis & Mathematical Models
+
+The reliability and performance of Two-Phase Commit (2PC) are heavily dependent on network characteristics. Below is a mathematical breakdown of how simulation variables interact.
+
+#### A. Variable Definitions
+| Variable | Flag | Description |
+|:---:|:---:|---|
+| $N$ | `--participants` | Number of Participant nodes |
+| $L$ | `--latency` | Average one-way network latency (ms) |
+| $D$ | `--drop-rate` | Probability of packet loss ($0 \le D < 1$) |
+| $A$ | `--abort-rate` | Probability of a node voting No ($0 \le A < 1$) |
+| $R$ | `--retry-interval` | Time between retry attempts (ms) |
+| $T$ | `--timeout` | Global transaction timeout (s) |
+
+#### B. Probability of Global Commit
+For a transaction to commit, **all** $N$ participants must vote Yes and **all** critical messages must eventually be delivered (potentially after retries).
+
+The probability that **all** participants vote "Yes" (Logic Success) is:
+$$ P(\text{Logic Success}) = (1 - A)^N $$
+
+#### Derivation: The "All-or-Nothing" Rule
+This formula comes from the core requirement of 2PC: **Every single participant must succeed.**
+1.  **Independent Events**: If we assume each node fails independently with probability $A$.
+2.  **The "AND" Logic**: Node 1 must say Yes **AND** Node 2 must say Yes **AND** ... Node $N$ must say Yes.
+3.  **Calculation**:
+    $$ P(\text{Success}) = \underbrace{(1-A) \times (1-A) \times \dots \times (1-A)}_{N \text{ times}} = (1-A)^N $$
+
+> **Visual Analogy:** Think of a long string of N Christmas lights in series. If even **one** bulb burns out ($VoteNo$), the entire string moves to darkness ($Abort$).
+
+**Table: The Scalability Bottleneck**
+Even a tiny failure rate becoming massive as $N$ grows ($A=0.001$ or 0.1%):
+| Participants ($N$) | Single Node Success | **Global Success** $(1-A)^N$ | Global Abort Chance |
+|:---:|:---:|:---:|:---:|
+| 1 | 99.9% | **99.9%** | 0.1% |
+| 10 | 99.9% | **99.0%** | 1.0% |
+| 100 | 99.9% | **90.4%** | 9.6% |
+| 1000 | 99.9% | **36.7%** | **63.3%** |
+
+This effectively demonstrates why 2PC is considered "fragile" at scale.
+
+#### C. Transaction Duration
+
+**1. Best Case (No Drops)**
+The minimum time is dominated by 4 message flights (Prepare -> Vote -> Commit -> Ack):
+$$ T_{\text{min}} \approx 4 \times L $$
+
+**2. Impact of Packet Drops**
+When packet loss ($D$) exists, messages must be resent. The expected number of attempts ($E[\text{attempts}]$) for a single message success follows a geometric distribution:
+$$ E[\text{attempts}] = \frac{1}{1-D} $$
+
+If a message is dropped, the delay increases by $R$ (Retry Interval). Thus, the effective latency for a single step becomes:
+$$ L_{\text{effective}} \approx L + \left(\frac{D}{1-D} \times R\right) $$
+
+> **Warning:** If $R < 2L$, the Coordinator will "spam" retries before the first response can possibly arrive.
+> **Requirement:** $T > L_{\text{effective}} \times 4$ to avoid timeout.
+
+#### D. Failure Condition (Timeout)
+The system will Abort due to Timeout if the total retries take too long:
+
+$$ \text{Timeout Occurs if: } \quad (4 \times L) + (\text{Total Retries} \times R) > T $$
+
+**Configuration Rule of Thumb:**
+To guarantee robustness against up to $k$ consecutive drops:
+$$ \text{Timeout} > (4 \times L) + (k \times R) $$
+
 ## Future Work
 - **Persistence**: Add Write-Ahead Logging (WAL) to simulate disk I/O latency.
 - **Recovery Protocol**: Implement the full recovery procedure for nodes coming back online after a crash.

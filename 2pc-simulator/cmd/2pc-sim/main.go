@@ -18,6 +18,7 @@ func main() {
 		voteNoRate      float64
 		timeoutSec      int
 		jitter          float64
+		retryInterval   int
 	)
 
 	flag.IntVar(&numParticipants, "participants", 3, "Number of participants")
@@ -26,6 +27,7 @@ func main() {
 	flag.Float64Var(&voteNoRate, "abort-rate", 0.0, "Probability of a participant voting No (0.0 - 1.0)")
 	flag.IntVar(&timeoutSec, "timeout", 5, "Transaction timeout in seconds")
 	flag.Float64Var(&jitter, "jitter", 0.2, "Network jitter (0.0 - 1.0)")
+	flag.IntVar(&retryInterval, "retry-interval", 500, "Retry interval in ms")
 	flag.Parse()
 
 	rand.Seed(time.Now().UnixNano())
@@ -61,7 +63,7 @@ func main() {
 	}
 
 	// Initialize Coordinator
-	coord := node.NewCoordinator(coordID, net, pIDs, time.Duration(timeoutSec)*time.Second)
+	coord := node.NewCoordinator(coordID, net, pIDs, time.Duration(timeoutSec)*time.Second, time.Duration(retryInterval)*time.Millisecond)
 	coord.Start()
 
 	// Wait a bit for initialization

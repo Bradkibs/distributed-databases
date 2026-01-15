@@ -14,9 +14,7 @@ func TestCoordinatorCommit(t *testing.T) {
 	net.Register(pID, pChan)
 
 	coordID := "coord"
-	coord := NewCoordinator(coordID, net, []string{pID}, 1*time.Second)
-	// Lower retry interval for fast tests
-	coord.RetryInterval = 10 * time.Millisecond
+	coord := NewCoordinator(coordID, net, []string{pID}, 1*time.Second, 10*time.Millisecond)
 	coord.Start()
 
 	// Simulate Coordinator Logic in a goroutine because it blocks
@@ -79,7 +77,7 @@ func TestCoordinatorAbortOnNo(t *testing.T) {
 	net.Register(pID, pChan)
 
 	coordID := "coord"
-	coord := NewCoordinator(coordID, net, []string{pID}, 1*time.Second)
+	coord := NewCoordinator(coordID, net, []string{pID}, 1*time.Second, 10*time.Millisecond)
 	coord.Start()
 
 	done := make(chan bool)
@@ -137,8 +135,7 @@ func TestCoordinatorPrepareRetry(t *testing.T) {
 	// but MockNetwork captures it in SentMessages.
 
 	coordID := "coord"
-	coord := NewCoordinator(coordID, net, []string{pID}, 200*time.Millisecond)
-	coord.RetryInterval = 50 * time.Millisecond
+	coord := NewCoordinator(coordID, net, []string{pID}, 200*time.Millisecond, 50*time.Millisecond)
 	coord.Start()
 
 	// RunTransaction will timeout because we never reply
