@@ -1,4 +1,4 @@
-# Performance Analysis of Two-Phase Commit (2PC) in Varying Network Conditions
+# Performance Analysis of a non strict Two-Phase Commit (2PC) in Varying Network Conditions
 
 ## Overview
 This project implements a lightweight distributed transaction manager in Go to empirically measure the performance overhead and "blocking" behavior of the Two-Phase Commit (2PC) protocol. Unlike theoretical models that assume fixed delays, this simulation incorporates realistic network conditions such as variable latency, jitter, and packet loss.
@@ -13,7 +13,7 @@ This project implements a lightweight distributed transaction manager in Go to e
 The system is designed as an in-memory simulation to run efficient experiments without the overhead of real network sockets or disk I/O, while maintaining architectural accuracy.
 
 ### 1. ArchitectureThe project is titled:
-Performance Analysis of Two-Phase Commit (2PC) in Varying Network Conditions. The
+Performance Analysis of a non strict Two-Phase Commit (2PC) in Varying Network Conditions. The
 paper identifies managing distributed transactions as critical for reliability and failure atomicity in
 distributed database systems.
 However, the authors note that full distributed transaction support (like 2PC) has seen slow or
