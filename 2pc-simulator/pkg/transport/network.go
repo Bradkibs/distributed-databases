@@ -84,7 +84,6 @@ func (n *SimulatedNetwork) Send(msg protocol.Message) {
 
 func (n *SimulatedNetwork) DropCheck() bool {
 	// n.r is not safe for concurrent use, so we strictly speaking should lock it or use a per-goroutine source.
-	// Let's use math/rand global functions which are thread-safe (locked internally).
 	n.mu.Lock()
 	defer n.mu.Unlock()
 	return n.r.Float64() < n.DropRate
