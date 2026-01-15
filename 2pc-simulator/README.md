@@ -141,7 +141,7 @@ This formula comes from the core requirement of 2PC: **Every single participant 
 2.  **The "AND" Logic**: Node 1 must say Yes **AND** Node 2 must say Yes **AND** ... Node $N$ must say Yes.
 3.  **Calculation**:
 
-    $$ P(\text{Success}) = \underbrace{(1-A) \times (1-A) \times \dots \times (1-A)}_{N \text{ times}} = (1-A)^N $$
+$$ P(\text{Success}) = \underbrace{(1-A) \times (1-A) \times \dots \times (1-A)}_{N \text{ times}} = (1-A)^N $$
 
 > **Visual Analogy:** Think of a long string of N Christmas lights in series. If even **one** bulb burns out ($VoteNo$), the entire string moves to darkness ($Abort$).
 
