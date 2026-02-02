@@ -185,6 +185,98 @@ To guarantee robustness against up to $k$ consecutive drops:
 
 $$ \text{Timeout} > (4 \times L) + (k \times R) $$
 
+## Diagram
+```mermaid
+sequenceDiagram
+    autonumber
+    box rgb(240, 240, 240) The Managers
+    participant Client
+    participant C as Coordinator
+    end
+    box rgb(255, 235, 235) The Interference Layer
+    participant Net as Network Simulator
+    end
+    box rgb(235, 255, 235) The Workers (N Nodes)
+    participant P1 as Participant 1
+    participant P2 as Participant 2 (...Pn)
+    end
+
+    Note over Client, P2: === PHASE 1: VOTING (The Uncertainty Phase) ===
+
+    Client->>C: Begin Transaction (Tx)
+    activate C
+    C->>C: Init Tx Context & Timeout Clock
+
+    Note over C, Net: Critical Step: Broadcasts are subjected to network flaws.
+    par Broadcast PREPARE
+        C->>Net: Send PREPARE(Tx) to P1
+        C->>Net: Send PREPARE(Tx) to P2
+    end
+
+    activate Net
+    Note right of Net: **SIMULATION INTERFERENCE 1 (Request Leg)**<br/>For each message:<br/>1. Roll dice for PACKET LOSS. If lost, drop.<br/>2. If not lost, calculate JITTER (random delay).<br/>3. Sleep for jitter duration.
+    
+    alt Message Lost or Jitter > C Timeout
+        Net--xC: (Silently Dropped or Delayed too long)
+        Note left of C: **CRITICAL FAILURE 1: Timeout**<br/>C receives no reply. It must assume P is dead.<br/>Result: Forced GLOBAL ABORT.
+    else Message Delivered
+        Net->>P1: Forward PREPARE(Tx)
+        Net->>P2: Forward PREPARE(Tx)
+    end
+    deactivate Net
+
+    activate P1
+    activate P2
+    Note over P1, P2: **SIMULATED NODE BEHAVIOR**<br/>Even if network is okay, nodes may randomly decide to abort.
+    alt Simulated Internal Failure
+        P1->>P1: Decide VOTE_NO
+    else Success
+        P2->>P2: Acquire Locks, Decide VOTE_YES
+    end
+
+    par Return Votes
+        P1->>Net: Send VOTE_NO
+        P2->>Net: Send VOTE_YES
+    end
+    deactivate P1
+    deactivate P2
+
+    activate Net
+    Note right of Net: **SIMULATION INTERFERENCE 2 (Response Leg)**<br/>Votes are also subject to Jitter and Loss.<br/>Losing a VOTE_YES is disastrous for throughput.
+    Net->>C: Forward Votes (If not lost/delayed)
+    deactivate Net
+
+    Note over Client, P2: === PHASE 2: COMMIT/ABORT (The Blocking Hazard) ===
+
+    Note left of C: **Decision Logic:**<br/>If ALL votes YES within timeout -> COMMIT.<br/>If ANY vote NO OR Timeout occurred -> ABORT.
+
+    alt Decision: GLOBAL ABORT
+        C->>C: Log Abort
+        Note over C, P2: (Flow similar to commit below, but telling nodes to rollback)
+    else Decision: GLOBAL COMMIT
+        C->>C: Log Commit
+        
+        par Broadcast DECISION
+            C->>Net: Send COMMIT(Tx) to P1
+            C->>Net: Send COMMIT(Tx) to P2
+        end
+
+        activate Net
+        Note right of Net: **SIMULATION INTERFERENCE 3 (CRITICAL HAZARD)**<br/>If a COMMIT message is lost here, the participant<br/>that voted YES is now BLOCKED indefinitely,<br/>holding locks, waiting for a message that will never arrive.
+        
+        alt Packet Loss on P2's Commit Message
+            Net->>P1: Forward COMMIT(Tx)
+            Net--xP2: **(MESSAGE LOST)**
+        end
+        deactivate Net
+
+        P1->>P1: Commit changes & release locks
+        P1-->>C: Acknowledge
+        
+        Note over P2: **BLOCKED STATE**<br/>P2 voted YES. It cannot proceed without C's instruction.<br/>It holds locks indefinitely (until manual intervention or complex recovery).
+    end
+    deactivate C
+```
 ## Future Work
 - **Persistence**: Add Write-Ahead Logging (WAL) to simulate disk I/O latency.
 - **Recovery Protocol**: Implement the full recovery procedure for nodes coming back online after a crash.
