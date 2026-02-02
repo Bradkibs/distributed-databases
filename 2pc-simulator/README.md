@@ -187,16 +187,34 @@ $$ \text{Timeout} > (4 \times L) + (k \times R) $$
 
 ## Diagram
 ```mermaid
+%%{init: {
+  'theme': 'dark',
+  'themeVariables': {
+    'fontSize': '20px',
+    'fontFamily': 'verdana',
+    'actorFontSize': '20px',
+    'noteFontSize': '18px',
+    'messageFontSize': '20px',
+    'darkMode': true
+  }
+}}%%
+
 sequenceDiagram
     autonumber
-    box rgb(240, 240, 240) The Managers
+    
+    %% DEEP BLUE ZONE: The Management Layer (High contrast for white text)
+    box rgb(20, 40, 70) The Managers
     participant Client
     participant C as Coordinator
     end
-    box rgb(255, 235, 235) The Interference Layer
+    
+    %% DEEP RED ZONE: The Danger Zone
+    box rgb(70, 20, 20) The Interference Layer
     participant Net as Network Simulator
     end
-    box rgb(235, 255, 235) The Workers (N Nodes)
+    
+    %% DEEP GREEN ZONE: The Worker Nodes
+    box rgb(20, 60, 30) The Workers (N Nodes)
     participant P1 as Participant 1
     participant P2 as Participant 2 (...Pn)
     end
@@ -214,11 +232,11 @@ sequenceDiagram
     end
 
     activate Net
-    Note right of Net: **SIMULATION INTERFERENCE 1 (Request Leg)**<br/>For each message:<br/>1. Roll dice for PACKET LOSS. If lost, drop.<br/>2. If not lost, calculate JITTER (random delay).<br/>3. Sleep for jitter duration.
+    Note right of Net: **SIMULATION INTERFERENCE 1**<br/>1. Roll dice for PACKET LOSS.<br/>2. If safe, calc JITTER.<br/>3. Sleep (delay).
     
     alt Message Lost or Jitter > C Timeout
-        Net--xC: (Silently Dropped or Delayed too long)
-        Note left of C: **CRITICAL FAILURE 1: Timeout**<br/>C receives no reply. It must assume P is dead.<br/>Result: Forced GLOBAL ABORT.
+        Net--xC: (Silently Dropped)
+        Note left of C: **CRITICAL FAILURE: Timeout**<br/>C receives no reply.<br/>Result: Forced GLOBAL ABORT.
     else Message Delivered
         Net->>P1: Forward PREPARE(Tx)
         Net->>P2: Forward PREPARE(Tx)
@@ -227,7 +245,7 @@ sequenceDiagram
 
     activate P1
     activate P2
-    Note over P1, P2: **SIMULATED NODE BEHAVIOR**<br/>Even if network is okay, nodes may randomly decide to abort.
+    Note over P1, P2: **SIMULATED NODE BEHAVIOR**<br/>Nodes may randomly abort internally.
     alt Simulated Internal Failure
         P1->>P1: Decide VOTE_NO
     else Success
@@ -242,17 +260,17 @@ sequenceDiagram
     deactivate P2
 
     activate Net
-    Note right of Net: **SIMULATION INTERFERENCE 2 (Response Leg)**<br/>Votes are also subject to Jitter and Loss.<br/>Losing a VOTE_YES is disastrous for throughput.
-    Net->>C: Forward Votes (If not lost/delayed)
+    Note right of Net: **SIMULATION INTERFERENCE 2**<br/>Votes are also subject to Jitter/Loss.
+    Net->>C: Forward Votes (If not lost)
     deactivate Net
 
     Note over Client, P2: === PHASE 2: COMMIT/ABORT (The Blocking Hazard) ===
 
-    Note left of C: **Decision Logic:**<br/>If ALL votes YES within timeout -> COMMIT.<br/>If ANY vote NO OR Timeout occurred -> ABORT.
+    Note left of C: **Decision Logic:**<br/>ALL YES -> COMMIT.<br/>ANY NO/Timeout -> ABORT.
 
     alt Decision: GLOBAL ABORT
         C->>C: Log Abort
-        Note over C, P2: (Flow similar to commit below, but telling nodes to rollback)
+        Note over C, P2: (Trigger Rollback)
     else Decision: GLOBAL COMMIT
         C->>C: Log Commit
         
@@ -262,18 +280,18 @@ sequenceDiagram
         end
 
         activate Net
-        Note right of Net: **SIMULATION INTERFERENCE 3 (CRITICAL HAZARD)**<br/>If a COMMIT message is lost here, the participant<br/>that voted YES is now BLOCKED indefinitely,<br/>holding locks, waiting for a message that will never arrive.
+        Note right of Net: **CRITICAL HAZARD**<br/>Loss here causes BLOCKING.
         
-        alt Packet Loss on P2's Commit Message
+        alt Packet Loss on P2's Commit
             Net->>P1: Forward COMMIT(Tx)
             Net--xP2: **(MESSAGE LOST)**
         end
         deactivate Net
 
-        P1->>P1: Commit changes & release locks
+        P1->>P1: Commit & Release
         P1-->>C: Acknowledge
         
-        Note over P2: **BLOCKED STATE**<br/>P2 voted YES. It cannot proceed without C's instruction.<br/>It holds locks indefinitely (until manual intervention or complex recovery).
+        Note over P2: **BLOCKED STATE**<br/>P2 voted YES. It waits forever.<br/>Locks are held indefinitely.
     end
     deactivate C
 ```
